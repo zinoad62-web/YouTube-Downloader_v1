@@ -24,10 +24,8 @@ def keep_alive():
 
 
 # --- كود البوت الخاص بك ---
-bot = TeleBot("8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o")
-
+bot = telebot.TeleBot("8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o")
 bot = telebot.TeleBot(TOKEN)
-
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
