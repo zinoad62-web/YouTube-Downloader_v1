@@ -24,7 +24,8 @@ def keep_alive():
 
 
 # --- كود البوت الخاص بك ---
-TOKEN = '8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o'
+TOKEN = 'bot = TeleBot("8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o")
+'
 bot = telebot.TeleBot(TOKEN)
 
 
