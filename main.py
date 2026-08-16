@@ -1,51 +1,37 @@
-from telebot import TeleBot
-import os
-from threading import Thread
-from flask import Flask
 import telebot
-from yt_dlp import YoutubeDL
+from flask import Flask
+from threading import Thread
 
-# --- خادم الويب الوهمي لحفظ البوت يعملاً 24/7 على Render ---
+# 1. إعداد خادم الويب لإبقاء البوت نشطاً على Render
 app = Flask('')
-
 
 @app.route('/')
 def home():
-  return 'Bot is alive!'
-
+    return "Bot is alive!"
 
 def run():
-  app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
-
+    app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
-  t = Thread(target=run)
-  t.start()
+    t = Thread(target=run)
+    t.start()
 
+# 2. إعداد البوت والتوكن
+TOKEN = "8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o"
+bot = telebot.TeleBot(TOKEN)
 
-# --- كود البوت الخاص بك ---
-bot = telebot.TeleBot("8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o")
-bot = telebot.TeleBot("8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o")
-
+# 3. دالة الاستجابة لأمر /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-  bot.reply_to(message, 'أهلاً بك! قم بإرسال رابط الفيديو لتنزيله.')
+    bot.reply_to(message, "أهلاً بك! البوت يعمل بنجاح الآن 🚀")
 
-
+# 4. دالة الاستجابة للرسائل العامة أو الروابط
 @bot.message_handler(func=lambda message: True)
-def download_video(message):
-  url = message.text
-  if 'youtube.com' in url or 'youtu.be' in url:
-    bot.reply_to(message, 'جاري التحميل...')
-    # كود التحميل بـ yt-dlp الخاص بك
-  else:
-    bot.reply_to(message, 'أرسل رابط يوتيوب صحيح.')
+def echo_all(message):
+    bot.reply_to(message, f"تم استلام رسالتك: {message.text}")
 
-
+# 5. تشغيل البوت
 if __name__ == '__main__':
-  keep_alive()  # تشغيل خادم الويب
-  if __name__ == '__main__':
-        keep_alive()
-        bot.remove_webhook(drop_pending_updates=True)
-        bot.infinity_polling()
-
+    keep_alive()
+    bot.remove_webhook(drop_pending_updates=True)
+    bot.infinity_polling()
