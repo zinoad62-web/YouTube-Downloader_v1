@@ -3,7 +3,7 @@ import telebot
 from yt_dlp import YoutubeDL
 
 # استبدل النص بين التنصيص بتوكن بوتك من BotFather
-TOKEN = "8932809251:AAFsuTNe9tjsDpX-GZFQ1-LHJHr_jtOoUOg"
+TOKEN = "8932809251:AAExxj0ORQhI_tFWY6wsbzmjJYgtlegNb_o"
 
 bot = telebot.TeleBot(TOKEN)
 
