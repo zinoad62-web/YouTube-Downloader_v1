@@ -10,8 +10,16 @@ app = Flask(__name__)
 
 URL = "https://youtube-bot-pig5.onrender.com/"
 
-# تخزين بيانات الطلبات مؤقتاً
 user_data = {}
+
+# دالة لتنظيف وتحويل روابط يوتيوب والشورتس
+def clean_youtube_url(url):
+    if "youtube.com/shorts/" in url:
+        url = url.replace("youtube.com/shorts/", "youtube.com/watch?v=")
+    if "youtu.be/" in url:
+        url = url.replace("youtu.be/", "youtube.com/watch?v=")
+    url = url.split("?")[0]
+    return url
 
 @app.route('/')
 def home():
@@ -26,22 +34,29 @@ def getMessage():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك! أرسل لي رابط أي فيديو من أي منصة وسأقوم باستخراج الجودات المتاحة لتحميله 🎬")
+    bot.reply_to(message, "أهلاً بك! أرسل لي رابط أي فيديو وسأقوم بجلبه لك 🎬")
 
-# استقبال الرابط وجلب الجودات المتاحة
 @bot.message_handler(func=lambda message: True)
 def handle_link(message):
-    url = message.text.strip()
+    raw_url = message.text.strip()
+    url = clean_youtube_url(raw_url)
+
     if not (url.startswith("http://") or url.startswith("https://")):
         bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http أو https")
         return
 
-    msg = bot.reply_to(message, "جاري فحص الرابط واستخراج الجودات المتاحة... ⏳")
+    msg = bot.reply_to(message, "جاري فحص الرابط وتجاوز حماية يوتيوب... ⏳")
 
+    # إعدادات محاكاة الهواتف لتجاوز حظر Render IP
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'mweb']
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1'
     }
 
     try:
@@ -51,7 +66,6 @@ def handle_link(message):
 
         user_data[message.chat.id] = {'url': url, 'title': title}
 
-        # إنشاء الأزرار
         markup = InlineKeyboardMarkup()
         markup.row_width = 2
         markup.add(
@@ -61,45 +75,51 @@ def handle_link(message):
             InlineKeyboardButton("🎵 MP3 (صوت فقط)", callback_data="q_mp3")
         )
 
-        bot.edit_message_text(f"📹 **{title[:50]}...**\n\nاختر الجودة أو الصيغة المطلوبة:", 
+        bot.edit_message_text(f"📹 **{title[:50]}...**\n\nاختر الجودة المطلوبة:", 
                               message.chat.id, msg.message_id, parse_mode="Markdown", reply_markup=markup)
 
     except Exception as e:
-        bot.edit_message_text("حدث خطأ أثناء فحص الرابط. قد يكون الفيديو خاصاً أو المنصة غير مدعومة.", message.chat.id, msg.message_id)
+        bot.edit_message_text("تعذر جلب الفيديو. يوتيوب يحظر السيرفرات المجانية أو أن الفيديو محمي.", message.chat.id, msg.message_id)
 
-# معالجة اختيار الجودة والتحميل
 @bot.callback_query_handler(func=lambda call: call.data.startswith('q_'))
 def process_download(call):
     chat_id = call.message.chat.id
     data = user_data.get(chat_id)
 
     if not data:
-        bot.answer_callback_query(call.id, "انتهمت جلسة الرابط، يرجى إعادة إرساله.")
+        bot.answer_callback_query(call.id, "انتهت الجلسة، أعد إرسال الرابط.")
         return
 
     quality = call.data.split('_')[1]
     url = data['url']
     file_path = f"file_{chat_id}"
 
-    bot.edit_message_text(f"جاري التحميل بصيغة/جودة {quality}... قد يستغرق ذلك دقيقة ⏳", chat_id, call.message.message_id)
+    bot.edit_message_text(f"جاري التحميل بجودة {quality}... ⏳", chat_id, call.message.message_id)
+
+    common_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'mweb']
+            }
+        },
+        'max_filesize': 50 * 1024 * 1024
+    }
 
     if quality == 'mp3':
-        format_spec = 'bestaudio/best'
         file_path += '.mp3'
         ydl_opts = {
-            'format': format_spec,
+            **common_opts,
+            'format': 'bestaudio/best',
             'outtmpl': file_path,
-            'quiet': True,
-            'max_filesize': 50 * 1024 * 1024
         }
     else:
         file_path += '.mp4'
         ydl_opts = {
-            'format': f'best[height<={quality}][ext=mp4]/bestvideo[height<={quality}]+bestaudio/best',
+            **common_opts,
+            'format': f'best[height<={quality}][ext=mp4]/best',
             'outtmpl': file_path,
-            'quiet': True,
-            'max_filesize': 50 * 1024 * 1024,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
 
     try:
@@ -110,12 +130,12 @@ def process_download(call):
         
         with open(file_path, 'rb') as f:
             if quality == 'mp3':
-                bot.send_audio(chat_id, f, caption="تم تحميل الصوت بنجاح! 🎵")
+                bot.send_audio(chat_id, f, caption="تم التحميل بنجاح! 🎵")
             else:
                 bot.send_video(chat_id, f, caption=f"تم التحميل بجودة {quality}p! 🎉")
 
     except Exception as e:
-        bot.send_message(chat_id, "فشل التحميل. قد يكون حجم الفيديو يتجاوز حد تلجرام المجاني (50 ميجابايت) أو أن المنصة تحظر التحميل المباشر.")
+        bot.send_message(chat_id, "فشل التحميل. قد يكون حجم الفيديو يتجاوز 50MB المسموحة في تلجرام.")
 
     finally:
         if os.path.exists(file_path):
