@@ -46,7 +46,7 @@ def download_video(message):
 if __name__ == '__main__':
   keep_alive()  # تشغيل خادم الويب
   if __name__ == '__main__':
-      keep_alive()
-      bot.remove_webhook()  # سطر ذكي يطرد أي جلسة قديمة تلقائياً
-      bot.infinity_polling(skip_pending_updates=True)
-  # تشغيل البوت بدون توقف
+        keep_alive()
+        bot.remove_webhook(drop_pending_updates=True)
+        bot.infinity_polling()
+
