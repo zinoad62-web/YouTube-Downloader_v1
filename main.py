@@ -4,69 +4,74 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from flask import Flask, request
 import yt_dlp
 
-# ⚠️ قم بتغيير التوكن فوراً من BotFather لأن القديم تم كشفه!
-TOKEN = os.environ.get("BOT_TOKEN", "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4")
+# ضع التوكن الجديد الخاص بك مباشرة هنا
+TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
+BOT_URL = "https://youtube-bot-pig5.onrender.com"
+
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 user_data = {}
 
+# تفعيل الـ Webhook تلقائياً لربط Render مع تلجرام
+try:
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{BOT_URL}/{TOKEN}")
+except Exception as e:
+    print(f"Error setting webhook: {e}")
+
 @app.route('/')
 def home():
-    return "Bot is running successfully!"
+    return "Bot is running!"
 
 @app.route('/' + TOKEN, methods=['POST'])
 def getMessage():
-    json_string = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "!", 200
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "!", 200
+    return "Forbidden", 403
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك! 🎬\nأرسل لي أي رابط (YouTube, TikTok, Instagram, Facebook, Twitter...) وسأقوم بجلبه لك.")
+    bot.reply_to(message, "أهلاً بك! 🎬\nأرسل لي رابط أي فيديو وسأقوم بجلبه لك.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_link(message):
     url = message.text.strip()
 
-    if not (url.startswith("http://") or url.startswith("https://")):
+    if not url.startswith(("http://", "https://")):
         bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http أو https")
         return
 
-    msg = bot.reply_to(message, "جاري فحص الرابط ومعالجة الفيديو... ⏳")
+    msg = bot.reply_to(message, "جاري فحص الرابط وإحضار الفيديو... ⏳")
 
-    # إعدادات عامة تناسب جميع المواقع
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'ignoreerrors': True,
-        # لتجاوز حظر يوتيوب على Render، يفضل إضافة ملف cookies.txt في مجلد المشروع
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+        'format': 'best',
+        'nocheckcertificate': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
             if not info:
-                raise Exception("فشل في استخراج البيانات")
-                
+                raise Exception("فشل في جلب البيانات")
             title = info.get('title', 'فيديو بدون عنوان')
 
         user_data[message.chat.id] = {'url': url, 'title': title}
 
         markup = InlineKeyboardMarkup()
-        markup.row_width = 2
         markup.add(
-            InlineKeyboardButton("🎬 فيديو (أعلى جودة)", callback_data="q_best"),
-            InlineKeyboardButton("📱 فيديو (جودة متوسطة)", callback_data="q_480"),
-            InlineKeyboardButton("🎵 MP3 (صوت فقط)", callback_data="q_mp3")
+            InlineKeyboardButton("📥 تحميل الفيديو", callback_data="q_video"),
+            InlineKeyboardButton("🎵 تحميل صوت MP3", callback_data="q_mp3")
         )
 
         bot.edit_message_text(
-            f"📹 **{title[:60]}**\n\nاختر الصيغة والجودة المطلوبة:", 
+            f"📹 **{title[:50]}**\n\nاختر الصيغة المطلوب تحميلها:", 
             message.chat.id, 
             msg.message_id, 
             parse_mode="Markdown", 
@@ -75,7 +80,7 @@ def handle_link(message):
 
     except Exception as e:
         bot.edit_message_text(
-            "❌ تعذر جلب الفيديو.\nتأكد من صحة الرابط، أو أن الحساب ليس خاصاً (Private).", 
+            "❌ تعذر جلب الفيديو.\nتأكد من صحة الرابط أو أن الحساب ليس خاصاً (Private).", 
             message.chat.id, 
             msg.message_id
         )
@@ -89,52 +94,48 @@ def process_download(call):
         bot.answer_callback_query(call.id, "انتهت الجلسة، أعد إرسال الرابط.")
         return
 
-    quality = call.data.split('_')[1]
+    action = call.data.split('_')[1]
     url = data['url']
-    file_prefix = f"download_{chat_id}"
+    file_prefix = f"file_{chat_id}"
 
-    bot.edit_message_text("جاري التحميل والمعالجة... ⏳", chat_id, call.message.message_id)
+    bot.edit_message_text("جاري التحميل والإرسال إلى تلجرام... ⏳", chat_id, call.message.message_id)
 
-    # إعدادات التحميل الموحدة
     ydl_opts = {
         'quiet': True,
-        'no_warnings': True,
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-        'max_filesize': 50 * 1024 * 1024, # حد تلجرام 50 ميجابايت
+        'outtmpl': f"{file_prefix}.%(ext)s",
+        'max_filesize': 50 * 1024 * 1024,
     }
 
-    if quality == 'mp3':
-        file_path = f"{file_prefix}.mp3"
-        ydl_opts.update({
-            'format': 'bestaudio/best',
-            'outtmpl': file_prefix,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
-    elif quality == '480':
-        file_path = f"{file_prefix}.mp4"
-        ydl_opts.update({
-            'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best',
-            'outtmpl': file_path,
-        })
+    if action == 'mp3':
+        ydl_opts['format'] = 'bestaudio/best'
     else:
-        file_path = f"{file_prefix}.mp4"
-        ydl_opts.update({
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': file_path,
-        })
+        ydl_opts['format'] = 'best[ext=mp4]/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
 
-        # البحث عن الملف المحمل في حال تغير الامتداد تلقائياً
-        final_file = file_path
-        if not os.path.exists(final_file):
-            for file in os.listdir('.'):
+        bot.send_chat_action(chat_id, 'upload_document')
+        
+        with open(filename, 'rb') as f:
+            if action == 'mp3':
+                bot.send_audio(chat_id, f, caption="تم التحميل بنجاح! 🎵")
+            else:
+                bot.send_video(chat_id, f, caption="تم التحميل بنجاح! 🎉")
+
+        if os.path.exists(filename):
+            os.remove(filename)
+
+    except Exception as e:
+        bot.send_message(chat_id, "❌ فشل التحميل. قد يكون حجم الفيديو أكبر من 50MB.")
+
+    finally:
+        user_data.pop(chat_id, None)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
                 if file.startswith(file_prefix):
                     final_file = file
                     break
