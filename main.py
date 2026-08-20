@@ -16,7 +16,7 @@ PORT = int(os.environ.get("PORT", 5000))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# إعدادات متقدمة ومحدثة لتجاوز حماية يوتيوب وتيك توك
+# إعدادات لتجاوز القيود بقدر الإمكان
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -24,14 +24,13 @@ YDL_OPTS = {
     'nocheckcertificate': True,
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'extractor_args': {
-        'youtube': {'player_client': ['android', 'web']},
-        'tiktok': {'app_info': '7.2.0'}
+        'youtube': {'player_client': ['android', 'ios', 'web']},
     },
 }
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك رابط التحميل فوراً.")
+    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو وسأجلب لك الرابط المباشر.")
 
 @dp.message(F.text.startswith("http"))
 async def handle_url(message: types.Message):
@@ -45,10 +44,8 @@ async def handle_url(message: types.Message):
                 
         info = await loop.run_in_executor(None, extract)
         
-        # التعامل مع الروابط المباشرة أو تنسيقات yt-dlp المختلفة
         video_url = info.get('url')
         if not video_url and 'formats' in info:
-            # اختيار أفضل تنسيق متاح إذا لم يكن الرابط المباشر موجوداً في المستوى الأول
             formats = info.get('formats', [])
             for f in formats:
                 if f.get('url') and f.get('vcodec') != 'none':
@@ -61,10 +58,11 @@ async def handle_url(message: types.Message):
             await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم الاستخراج بنجاح ⚡", parse_mode="Markdown")
             await msg.delete()
         else:
-            await msg.edit_text("❌ تعذر استخراج الرابط المباشر، قد يكون الفيديو محميًا أو الرابط غير مدعوم.")
+            await msg.edit_text("❌ لم يتم العثور على رابط فيديو مباشر في البيانات المستخرجة.")
             
     except Exception as e:
-        await msg.edit_text(f"❌ حدث خطأ أثناء المعالجة: تأكد أن الرابط عام وصحيح.")
+        # هنا سنعرض الخطأ الحقيقي تماماً لنعرف مشكلة السيرفر
+        await msg.edit_text(f"❌ الخطأ التقني الحقيقي:\n`{str(e)}`", parse_mode="Markdown")
 
 async def on_startup(bot: Bot):
     await bot.delete_webhook(drop_pending_updates=True)
