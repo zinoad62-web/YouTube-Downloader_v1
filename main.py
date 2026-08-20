@@ -5,7 +5,7 @@ from flask import Flask, request
 import yt_dlp
 
 TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
-URL = "https://youtube-bot-pig5.onrender.com/"
+URL = "https://youtube-downloader-v1.onrender.com/"  # 👈 تم تصحيح الرابط هنا ليعمل البوت بشكل صحيح
 CHANNEL_USERNAME = "@zinoad6162"  # ⚠️ ضع معرف قناتك هنا
 
 bot = telebot.TeleBot(TOKEN)
@@ -126,7 +126,6 @@ def process_download(call):
     except Exception as e:
         bot.send_message(chat_id, "❌ فشل التحميل. قد يكون حجم الفيديو أكبر من 50MB أو أن المنصة حظرت الرابط.")
     finally:
-        # 🧹 تنظيف الذاكرة: حذف الملف من السيرفر فوراً بعد الإرسال سواء نجح أو فشل
         if os.path.exists(file_path):
             os.remove(file_path)
         user_data.pop(chat_id, None)
