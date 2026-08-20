@@ -16,10 +16,12 @@ def check_subscription(user_id):
     try:
         member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
         return member.status in ['member', 'administrator', 'creator']
-    except: return False
+    except: 
+        return False
 
 @app.route('/')
-def home(): return "Bot is running!"
+def home(): 
+    return "Bot is running!"
 
 @app.route('/' + TOKEN, methods=['POST'])
 def getMessage():
@@ -28,7 +30,7 @@ def getMessage():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك في بوت التحميل السريع 🚀\nأرسل لي رابط أي فيديو وسأستخرج لك روابط التحميل فوراً وبدون تأخير.")
+    bot.reply_to(message, "أهلاً بك في بوت التحميل الشامل! 🎬\nأرسل لي رابط أي فيديو (يوتيوب، تيك توك...) وسأتينا لك بالخارات المتاحة.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_link(message):
@@ -45,13 +47,13 @@ def handle_link(message):
         bot.reply_to(message, "يرجى إرسال رابط صحيح 🔗")
         return
         
-    msg = bot.reply_to(message, "⏳ جاري فحص الرابط واستخراج خيارات التحميل...")
+    msg = bot.reply_to(message, "⏳ جاري فحص الرابط واستخراج معلومات الفيديو...")
     
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'extractor_args': {'youtube': {'player_client': ['android']}}, 
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, 
     }
     
     try:
@@ -61,16 +63,17 @@ def handle_link(message):
         
         user_data[message.chat.id] = {'url': raw_url, 'title': title}
         
+        # خيارات الجودات المتعددة
         markup = InlineKeyboardMarkup()
         markup.row_width = 2
         markup.add(
             InlineKeyboardButton("🎬 جودة عالية", callback_data="q_high"),
             InlineKeyboardButton("⚡ جودة منخفضة", callback_data="q_low"),
-            InlineKeyboardButton("🎵 صوت فقط (MP3)", callback_data="q_mp3")
+            InlineKeyboardButton("🎵 MP3 (صوت فقط)", callback_data="q_mp3")
         )
-        bot.edit_message_text(f"📹 **{title[:50]}...**\n\nاختر الجودة المطلوبة:", message.chat.id, msg.message_id, parse_mode="Markdown", reply_markup=markup)
+        bot.edit_message_text(f"📹 **{title[:50]}...**\n\nاختر الجودة المطلوبة للتحميل:", message.chat.id, msg.message_id, parse_mode="Markdown", reply_markup=markup)
     except Exception as e:
-        bot.edit_message_text("❌ تعذر جلب معلومات الفيديو. تأكد أن الرابط عام.", message.chat.id, msg.message_id)
+        bot.edit_message_text("❌ تعذر جلب معلومات الفيديو. تأكد أن الرابط عام وليس خاصاً.", message.chat.id, msg.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'check_sub')
 def process_check_sub(call):
@@ -93,43 +96,53 @@ def process_download(call):
     quality = call.data.split('_')[1]
     url = data['url']
     
-    bot.edit_message_text(f"⏳ جاري استخراج رابط التحميل السريع...", chat_id, call.message.message_id)
+    # تحديد اسم الملف المؤقت بناءً على الاختيار
+    file_path = f"file_{chat_id}.mp3" if quality == 'mp3' else f"file_{chat_id}.mp4"
+    bot.edit_message_text(f"⏳ جاري تنزيل وتجهيز الملف مؤقتاً...", chat_id, call.message.message_id)
     
-    if quality == 'high':
-        fmt = 'best[ext=mp4]/best'
-    elif quality == 'low':
-        fmt = 'worst[ext=mp4]/worst'
-    else:
+    if quality == 'mp3':
         fmt = 'bestaudio/best'
+    elif quality == 'high':
+        fmt = 'best[ext=mp4]/best'
+    else:
+        fmt = 'worst[ext=mp4]/worst'
         
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'extractor_args': {'youtube': {'player_client': ['android']}}, 
-        'format': fmt,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, 
+        'max_filesize': 50 * 1024 * 1024, # حماية السيرفر المجاني بحد أقصى 50 ميغا للملف
+        'format': fmt, 
+        'outtmpl': file_path
     }
     
     try:
+        # 1. التحميل المؤقت على السيرفر
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            direct_url = info.get('url')
+            ydl.download([url])
             
-        if not direct_url:
-            raise Exception("No direct URL")
-            
-        if quality == 'mp3':
-            bot.send_message(chat_id, f"🎵 **رابط الصوت المباشر:**\n{direct_url}", parse_mode="Markdown")
-        else:
-            bot.send_video(chat_id, direct_url, caption="تم استخراج الفيديو بنجاح بسرعة فائقة! 🚀")
-            
+        # 2. الإرسال إلى تيليجرام
+        bot.send_chat_action(chat_id, 'upload_document')
+        with open(file_path, 'rb') as f:
+            if quality == 'mp3':
+                bot.send_audio(chat_id, f, caption="تم التحميل بنجاح! 🎵")
+            else:
+                bot.send_video(chat_id, f, caption="تم التحميل بنجاح! 🎉")
+        
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except: pass
         
     except Exception as e:
-        bot.edit_message_text("❌ فشل استخراج الرابط المباشر لهذا الفيديو.", chat_id, call.message.message_id)
+        bot.edit_message_text("❌ فشل التحميل. قد يكون حجم الفيديو أكبر من 50MB أو أن الرابط غير مدعوم.", chat_id, call.message.message_id)
     finally:
+        # 🧹 3. الحذف التلقائي والفوري من السيرفر لمنع امتلاء المساحة تماماً
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except:
+                pass
         user_data.pop(chat_id, None)
 
 if __name__ == '__main__':
