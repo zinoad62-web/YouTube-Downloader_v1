@@ -6,7 +6,7 @@ import yt_dlp
 
 TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
 URL = "https://youtube-bot-pig5.onrender.com/"
-CHANNEL_USERNAME = "@zinoad6162"  # ⚠️ ضع معرف قناتك هنا (مثلاً @MyChannel)
+CHANNEL_USERNAME = "@zinoad6162"  # ⚠️ ضع معرف قناتك هنا (مع الاحتفاظ بـ @)
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -34,13 +34,13 @@ def getMessage():
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك في بوت التحميل الشامل! 🎬\nأرسل لي رابط أي فيديو (من يوتيوب، تيك توك، إنستغرام، فيسبوك...) وسأقوم بتحميله لك فوراً.")
+    bot.reply_to(message, "أهلاً بك في بوت التحميل الشامل! 🎬\nأرسل لي رابط أي فيديو وسأقوم بتحميله لك.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_link(message):
     user_id = message.from_user.id
     
-    # 1. التحقق من الاشتراك الإجباري أولاً
+    # التحقق من الاشتراك الإجباري أولاً
     if not check_subscription(user_id):
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("اشترك في القناة 📢", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"))
@@ -53,7 +53,6 @@ def handle_link(message):
         )
         return
 
-    # 2. فحص الرابط وإرسال خيارات التحميل
     raw_url = message.text.strip()
     if not raw_url.startswith(("http://", "https://")):
         bot.reply_to(message, "يرجى إرسال رابط صحيح يبدأ بـ http أو https 🔗")
@@ -61,6 +60,7 @@ def handle_link(message):
         
     msg = bot.reply_to(message, "جاري فحص الرابط واستخراج معلومات الفيديو... ⏳")
     
+    # إعدادات يوتيوب لتجاوز الحظر واستخراج المعلومات
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
@@ -123,7 +123,8 @@ def process_download(call):
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
-        'max_filesize': 50 * 1024 * 1024, # حد تليغرام 50 ميجابايت
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb']}}, 
+        'max_filesize': 50 * 1024 * 1024,
         'format': fmt, 
         'outtmpl': file_path
     }
