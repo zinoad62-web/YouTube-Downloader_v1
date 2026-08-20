@@ -7,8 +7,7 @@ from aiohttp import web
 import yt_dlp
 
 TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
-# ⚠️ رابط سيرفرك الفعلي على Render تماماً
-BASE_URL = "https://youtube-downloader-v1.onrender.com"
+BASE_URL = "https://youtube-downloader-v1.onrender.com"  # استبدل هذا برابط تطبيقك الفعلي على Render لاحقاً
 WEBHOOK_PATH = f"/{TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
@@ -52,8 +51,9 @@ async def handle_url(message: types.Message):
     except Exception as e:
         await msg.edit_text("❌ حدث خطأ أو أن الرابط غير مدعوم أو محمي.")
 
-# إعداد الويب هوك عند بدء تشغيل السيرفر
+# دالة التشغيل يتم فيها استخدام await بشكل صحيح داخل async def
 async def on_startup(bot: Bot):
+    await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(WEBHOOK_URL)
 
 async def main():
@@ -61,14 +61,12 @@ async def main():
     
     app = web.Application()
     
-    # ربط مسار الويب هوك مع Aiogram
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
     )
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     
-    # صفحة رئيسية للفحص والتأكد من أن السيرفر يعمل
     async def home(request):
         return web.Response(text="Bot is running via Webhook!")
     app.router.add_get("/", home)
@@ -80,16 +78,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
     
-    # إبقاء السيرفر قيد العمل واستقبال الطلبات
     await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-    await bot.delete_webhook(drop_pending_updates=True)
-    
-    # تشغيل السيرفر الوهمي وبوت تيليجرام معاً
-    await web_server()
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
