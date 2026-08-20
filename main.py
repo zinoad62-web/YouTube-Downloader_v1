@@ -60,11 +60,12 @@ def handle_link(message):
         
     msg = bot.reply_to(message, "جاري فحص الرابط واستخراج معلومات الفيديو... ⏳")
     
-    # إعدادات يوتيوب لتجاوز الحظر واستخراج المعلومات
+    # إعدادات يوتيوب المحدثة لتجاوز الحظر
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb']}}, 
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'extractor_args': {'youtube': {'player_client': ['android']}}, 
     }
     
     try:
@@ -123,7 +124,8 @@ def process_download(call):
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True, 
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'mweb']}}, 
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'extractor_args': {'youtube': {'player_client': ['android']}}, 
         'max_filesize': 50 * 1024 * 1024,
         'format': fmt, 
         'outtmpl': file_path
