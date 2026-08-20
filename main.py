@@ -11,7 +11,7 @@ PORT = int(os.environ.get("PORT", 5000))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# إعدادات لتبدو كمتصفح حقيقي وتجاوز الحظر
+# إعدادات لتجاوز الحماية كمتصفح حقيقي
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
@@ -29,7 +29,6 @@ async def handle_url(message: types.Message):
     try:
         loop = asyncio.get_running_loop()
         
-        # تشغيل yt-dlp في خلفية غير متزامنة لكي لا يتجمد البوت
         def extract():
             with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
                 return ydl.extract_info(message.text, download=False)
@@ -47,7 +46,7 @@ async def handle_url(message: types.Message):
     except Exception as e:
         await msg.edit_text("❌ حدث خطأ أو أن الرابط غير مدعوم أو محمي.")
 
-# --- سيرفر وهمي لتلبية شروط استضافة Render وجعل البوت يعمل دائماً ---
+# سيرفر وهمي لتلبية شروط استضافة Render
 async def handle(request):
     return web.Response(text="Bot is running and alive!")
 
@@ -60,7 +59,10 @@ async def web_server():
     await site.start()
 
 async def main():
-    # تشغيل السيرفر الوهمي وبوت تيليجرام معاً في نفس الوقت (Concurrent)
+    # 🛠️ الحل هنا: حذف أي Webhook قديم عالق في تيليجرام قبل بدء البوت
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # تشغيل السيرفر الوهمي وبوت تيليجرام معاً
     await web_server()
     await dp.start_polling(bot)
 
