@@ -16,53 +16,58 @@ PORT = int(os.environ.get("PORT", 5000))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# 🚀 الحل الاحترافي للبوتات العامة: محاكاة تطبيقات الهواتف لتجاوز الحظر للجميع بدون كوكيز
-YDL_OPTS = {
-    'quiet': True,
-    'no_warnings': True,
-    'geo_bypass': True,
-    'nocheckcertificate': True,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['ios', 'android']  # تجاوز الحظر عبر واجهة الهواتف الذكية
-        },
-    },
-}
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك الرابط المباشر فوراً للجميع.")
+    await message.answer("أهلاً بك في بوت التحميل 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأقوم بتحميله وإرساله لك فوراً.")
 
 @dp.message(F.text.startswith("http"))
 async def handle_url(message: types.Message):
-    msg = await message.answer("⏳ جاري استخراج الرابط المباشر...")
+    msg = await message.answer("⏳ جاري تحميل الفيديو وإرساله...")
+    file_path = None
     try:
         loop = asyncio.get_running_loop()
         
-        def extract():
-            with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-                return ydl.extract_info(message.text, download=False)
-                
-        info = await loop.run_in_executor(None, extract)
+        # إعدادات التحميل المؤقت وتجاوز القيود
+        ydl_opts = {
+            'format': 'best[filesize<50M]/best',  # اختيار أفضل جودة بحجم مناسب لسرعة الإرسال
+            'outtmpl': 'video_temp.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+            'geo_bypass': True,
+            'extractor_args': {
+                'youtube': {'player_client': ['ios', 'android']},
+            },
+        }
         
-        video_url = info.get('url')
-        if not video_url and 'formats' in info:
-            formats = info.get('formats', [])
-            for f in formats:
-                if f.get('url') and f.get('vcodec') != 'none':
-                    video_url = f.get('url')
-                    break
-                    
-        title = info.get('title', 'فيديو')
-            
-        if video_url:
-            await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم الاستخراج بنجاح ⚡", parse_mode="Markdown")
+        def download_video():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(message.text, download=True)
+                return ydl.prepare_filename(info), info.get('title', 'فيديو')
+
+        # تنفيذ التحميل في الخلفية لكي لا يتجمد البوت
+        file_path, title = await loop.run_in_executor(None, download_video)
+        
+        if file_path and os.path.exists(file_path):
+            video_file = types.FSInputFile(file_path)
+            await message.answer_video(
+                video=video_file, 
+                caption=f"🎬 **{title[:50]}**\n\nتم التحميل بنجاح ✅", 
+                parse_mode="Markdown"
+            )
             await msg.delete()
         else:
-            await msg.edit_text("❌ تعذر استخراج الرابط، تأكد أنه عام وصحيح.")
+            await msg.edit_text("❌ تعذر تحميل الفيديو، تأكد أن الرابط عام وصحيح.")
             
     except Exception as e:
-        await msg.edit_text(f"❌ عذراً، حدث خطأ أثناء المعالجة:\n`{str(e)}`", parse_mode="Markdown")
+        await msg.edit_text(f"❌ حدث خطأ أثناء التحميل:\n`{str(e)}`", parse_mode="Markdown")
+        
+    finally:
+        # 🧹 تنظيف مساحة السيرفر وحذف الملف المؤقت فوراً بعد الإرسال
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except:
+                pass
 
 async def on_startup(bot: Bot):
     await bot.delete_webhook(drop_pending_updates=True)
