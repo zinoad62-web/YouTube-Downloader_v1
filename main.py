@@ -16,21 +16,22 @@ PORT = int(os.environ.get("PORT", 5000))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# إعدادات لتجاوز القيود بقدر الإمكان
+# 🚀 الحل الاحترافي للبوتات العامة: محاكاة تطبيقات الهواتف لتجاوز الحظر للجميع بدون كوكيز
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
     'geo_bypass': True,
     'nocheckcertificate': True,
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     'extractor_args': {
-        'youtube': {'player_client': ['android', 'ios', 'web']},
+        'youtube': {
+            'player_client': ['ios', 'android']  # تجاوز الحظر عبر واجهة الهواتف الذكية
+        },
     },
 }
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو وسأجلب لك الرابط المباشر.")
+    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك الرابط المباشر فوراً للجميع.")
 
 @dp.message(F.text.startswith("http"))
 async def handle_url(message: types.Message):
@@ -58,11 +59,10 @@ async def handle_url(message: types.Message):
             await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم الاستخراج بنجاح ⚡", parse_mode="Markdown")
             await msg.delete()
         else:
-            await msg.edit_text("❌ لم يتم العثور على رابط فيديو مباشر في البيانات المستخرجة.")
+            await msg.edit_text("❌ تعذر استخراج الرابط، تأكد أنه عام وصحيح.")
             
     except Exception as e:
-        # هنا سنعرض الخطأ الحقيقي تماماً لنعرف مشكلة السيرفر
-        await msg.edit_text(f"❌ الخطأ التقني الحقيقي:\n`{str(e)}`", parse_mode="Markdown")
+        await msg.edit_text(f"❌ عذراً، حدث خطأ أثناء المعالجة:\n`{str(e)}`", parse_mode="Markdown")
 
 async def on_startup(bot: Bot):
     await bot.delete_webhook(drop_pending_updates=True)
