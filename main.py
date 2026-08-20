@@ -1,153 +1,68 @@
+import asyncio
 import os
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from flask import Flask, request
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiohttp import web
 import yt_dlp
 
 TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
-URL = "https://youtube-downloader-v1.onrender.com/"
-CHANNEL_USERNAME = "@zinoad6162"  # ⚠️ ضع معرف قناتك هنا
+PORT = int(os.environ.get("PORT", 5000))
 
-bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
-user_data = {}
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
 
-def check_subscription(user_id):
+# إعدادات لتبدو كمتصفح حقيقي وتجاوز الحظر
+YDL_OPTS = {
+    'quiet': True,
+    'no_warnings': True,
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+}
+
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك رابط التحميل فوراً وبدون استهلاك لموارد السيرفر.")
+
+@dp.message(F.text.startswith("http"))
+async def handle_url(message: types.Message):
+    msg = await message.answer("⏳ جاري استخراج الرابط المباشر...")
     try:
-        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except: 
-        return False
-
-@app.route('/')
-def home(): 
-    return "Bot is running!"
-
-@app.route('/' + TOKEN, methods=['POST'])
-def getMessage():
-    bot.process_new_updates([telebot.types.Update.de_json(request.get_data().decode('utf-8'))])
-    return "!", 200
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك في بوت التحميل الشامل! 🎬\nأرسل لي رابط أي فيديو (يوتيوب، تيك توك...) وسأتينا لك بالخارات المتاحة.")
-
-@bot.message_handler(func=lambda message: True)
-def handle_link(message):
-    user_id = message.from_user.id
-    if not check_subscription(user_id):
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("اشترك في القناة 📢", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"))
-        markup.add(InlineKeyboardButton("تحقق من الاشتراك ✅", callback_data="check_sub"))
-        bot.reply_to(message, "يجب عليك الاشتراك في القناة أولاً لتتمكن من استخدام البوت 👇", reply_markup=markup)
-        return
-
-    raw_url = message.text.strip()
-    if not raw_url.startswith(("http://", "https://")):
-        bot.reply_to(message, "يرجى إرسال رابط صحيح 🔗")
-        return
+        loop = asyncio.get_running_loop()
         
-    msg = bot.reply_to(message, "⏳ جاري فحص الرابط واستخراج معلومات الفيديو...")
-    
-    ydl_opts = {
-        'quiet': True, 
-        'no_warnings': True, 
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, 
-    }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(raw_url, download=False)
-            title = info.get('title', 'فيديو') if info else 'فيديو'
-        
-        user_data[message.chat.id] = {'url': raw_url, 'title': title}
-        
-        # خيارات الجودات المتعددة
-        markup = InlineKeyboardMarkup()
-        markup.row_width = 2
-        markup.add(
-            InlineKeyboardButton("🎬 جودة عالية", callback_data="q_high"),
-            InlineKeyboardButton("⚡ جودة منخفضة", callback_data="q_low"),
-            InlineKeyboardButton("🎵 MP3 (صوت فقط)", callback_data="q_mp3")
-        )
-        bot.edit_message_text(f"📹 **{title[:50]}...**\n\nاختر الجودة المطلوبة للتحميل:", message.chat.id, msg.message_id, parse_mode="Markdown", reply_markup=markup)
-    except Exception as e:
-        bot.edit_message_text("❌ تعذر جلب معلومات الفيديو. تأكد أن الرابط عام وليس خاصاً.", message.chat.id, msg.message_id)
-
-@bot.callback_query_handler(func=lambda call: call.data == 'check_sub')
-def process_check_sub(call):
-    if check_subscription(call.from_user.id):
-        bot.answer_callback_query(call.id, "شكراً لاشتراكك!", show_alert=True)
-        try: bot.delete_message(call.message.chat.id, call.message.message_id)
-        except: pass
-        bot.send_message(call.message.chat.id, "ممتاز! أرسل رابط الفيديو الآن 🎬")
-    else:
-        bot.answer_callback_query(call.id, "لم تقم بالاشتراك بعد! ❌", show_alert=True)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('q_'))
-def process_download(call):
-    chat_id = call.message.chat.id
-    data = user_data.get(chat_id)
-    if not data:
-        bot.answer_callback_query(call.id, "انتهت الجلسة، أعد إرسال الرابط.")
-        return
-        
-    quality = call.data.split('_')[1]
-    url = data['url']
-    
-    # تحديد اسم الملف المؤقت بناءً على الاختيار
-    file_path = f"file_{chat_id}.mp3" if quality == 'mp3' else f"file_{chat_id}.mp4"
-    bot.edit_message_text(f"⏳ جاري تنزيل وتجهيز الملف مؤقتاً...", chat_id, call.message.message_id)
-    
-    if quality == 'mp3':
-        fmt = 'bestaudio/best'
-    elif quality == 'high':
-        fmt = 'best[ext=mp4]/best'
-    else:
-        fmt = 'worst[ext=mp4]/worst'
-        
-    ydl_opts = {
-        'quiet': True, 
-        'no_warnings': True, 
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, 
-        'max_filesize': 50 * 1024 * 1024, # حماية السيرفر المجاني بحد أقصى 50 ميغا للملف
-        'format': fmt, 
-        'outtmpl': file_path
-    }
-    
-    try:
-        # 1. التحميل المؤقت على السيرفر
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        # تشغيل yt-dlp في خلفية غير متزامنة لكي لا يتجمد البوت
+        def extract():
+            with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+                return ydl.extract_info(message.text, download=False)
+                
+        info = await loop.run_in_executor(None, extract)
+        video_url = info.get('url')
+        title = info.get('title', 'فيديو')
             
-        # 2. الإرسال إلى تيليجرام
-        bot.send_chat_action(chat_id, 'upload_document')
-        with open(file_path, 'rb') as f:
-            if quality == 'mp3':
-                bot.send_audio(chat_id, f, caption="تم التحميل بنجاح! 🎵")
-            else:
-                bot.send_video(chat_id, f, caption="تم التحميل بنجاح! 🎉")
-        
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except: pass
-        
+        if video_url:
+            await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم التحميل بنجاح بسرعة فائقة ⚡", parse_mode="Markdown")
+            await msg.delete()
+        else:
+            await msg.edit_text("❌ تعذر استخراج الرابط المباشر لهذا الفيديو.")
+            
     except Exception as e:
-        bot.edit_message_text("❌ فشل التحميل. قد يكون حجم الفيديو أكبر من 50MB أو أن الرابط غير مدعوم.", chat_id, call.message.message_id)
-    finally:
-        # 🧹 3. الحذف التلقائي والفوري من السيرفر لمنع امتلاء المساحة تماماً
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except:
-                pass
-        user_data.pop(chat_id, None)
+        await msg.edit_text("❌ حدث خطأ أو أن الرابط غير مدعوم أو محمي.")
 
-if __name__ == '__main__':
-    try:
-        bot.remove_webhook()
-        bot.set_webhook(url=URL + TOKEN)
-    except: pass
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+# --- سيرفر وهمي لتلبية شروط استضافة Render وجعل البوت يعمل دائماً ---
+async def handle(request):
+    return web.Response(text="Bot is running and alive!")
+
+async def web_server():
+    app = web.Application()
+    app.add_routes([web.get('/', handle)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+
+async def main():
+    # تشغيل السيرفر الوهمي وبوت تيليجرام معاً في نفس الوقت (Concurrent)
+    await web_server()
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
