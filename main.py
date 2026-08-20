@@ -7,7 +7,7 @@ from aiohttp import web
 import yt_dlp
 
 TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
-BASE_URL = "https://youtube-downloader-v1.onrender.com"  # استبدل هذا برابط تطبيقك الفعلي على Render لاحقاً
+BASE_URL = "https://youtube-downloader-v1.onrender.com"  # رابط تطبيقك على Render
 WEBHOOK_PATH = f"/{TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
@@ -16,17 +16,22 @@ PORT = int(os.environ.get("PORT", 5000))
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# إعدادات لتبدو كمتصفح حقيقي وتجاوز الحظر
+# إعدادات متقدمة ومحدثة لتجاوز حماية يوتيوب وتيك توك
 YDL_OPTS = {
     'quiet': True,
     'no_warnings': True,
-    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+    'geo_bypass': True,
+    'nocheckcertificate': True,
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'extractor_args': {
+        'youtube': {'player_client': ['android', 'web']},
+        'tiktok': {'app_info': '7.2.0'}
+    },
 }
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك رابط التحميل فوراً وبدون استهلاك لموارد السيرفر.")
+    await message.answer("أهلاً بك في بوت التحميل السريع 🚀\nأرسل رابط أي فيديو (يوتيوب، تيك توك) وسأجلب لك رابط التحميل فوراً.")
 
 @dp.message(F.text.startswith("http"))
 async def handle_url(message: types.Message):
@@ -39,19 +44,28 @@ async def handle_url(message: types.Message):
                 return ydl.extract_info(message.text, download=False)
                 
         info = await loop.run_in_executor(None, extract)
+        
+        # التعامل مع الروابط المباشرة أو تنسيقات yt-dlp المختلفة
         video_url = info.get('url')
+        if not video_url and 'formats' in info:
+            # اختيار أفضل تنسيق متاح إذا لم يكن الرابط المباشر موجوداً في المستوى الأول
+            formats = info.get('formats', [])
+            for f in formats:
+                if f.get('url') and f.get('vcodec') != 'none':
+                    video_url = f.get('url')
+                    break
+                    
         title = info.get('title', 'فيديو')
             
         if video_url:
-            await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم التحميل بنجاح بسرعة فائقة ⚡", parse_mode="Markdown")
+            await message.answer_video(video=video_url, caption=f"🎬 **{title[:50]}**\n\nتم الاستخراج بنجاح ⚡", parse_mode="Markdown")
             await msg.delete()
         else:
-            await msg.edit_text("❌ تعذر استخراج الرابط المباشر لهذا الفيديو.")
+            await msg.edit_text("❌ تعذر استخراج الرابط المباشر، قد يكون الفيديو محميًا أو الرابط غير مدعوم.")
             
     except Exception as e:
-        await msg.edit_text("❌ حدث خطأ أو أن الرابط غير مدعوم أو محمي.")
+        await msg.edit_text(f"❌ حدث خطأ أثناء المعالجة: تأكد أن الرابط عام وصحيح.")
 
-# دالة التشغيل يتم فيها استخدام await بشكل صحيح داخل async def
 async def on_startup(bot: Bot):
     await bot.delete_webhook(drop_pending_updates=True)
     await bot.set_webhook(WEBHOOK_URL)
