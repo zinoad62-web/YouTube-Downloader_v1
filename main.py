@@ -10,7 +10,7 @@ from aiohttp import web
 import yt_dlp
 
 # --- الإعدادات ---
-TOKEN = os.environ.get("BOT_TOKEN", "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4")
+TOKEN = os.environ.get("BOT_TOKEN", "8932809251:AAEqlRuJcovbmq7fWont1N_wNOWNAmgRFBk")
 CHANNEL_ID = "@zinoad6162"  # تأكد من رفع البوت مشرفاً في القناة
 PORT = int(os.environ.get("PORT", 8080))
 
