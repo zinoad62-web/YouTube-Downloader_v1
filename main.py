@@ -1,20 +1,19 @@
 import asyncio
-import os
 import glob
+import os
 import uuid
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
-from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 import yt_dlp
 
 # --- الإعدادات ---
-# تنبيه: يفضل استخدام متغيرات البيئة لعدم كشف التوكين
 TOKEN = os.environ.get("BOT_TOKEN", "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4")
-CHANNEL_ID = "@zinoad6162"  # تنبيه: يجب إضافة البوت كمشرف في القناة ليعمل فحص الاشتراك
-BASE_URL = "https://youtube-downloader-v1.onrender.com"
+CHANNEL_ID = "@zinoad6162"  # تأكد من إضافة البوت كمشرف في هذه القناة
+BASE_URL = os.environ.get("BASE_URL", "https://youtube-downloader-v1.onrender.com")
 WEBHOOK_PATH = f"/{TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 PORT = int(os.environ.get("PORT", 5000))
@@ -23,7 +22,7 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 CACHE = {}
 
-# مجلد مؤقت للتحميلات لتجنب تداخل ملفات المستخدمين
+# مجلد مؤقت لحفظ التحميلات
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -62,7 +61,8 @@ async def handle_url(message: types.Message):
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': False
+            'extract_flat': False,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         }
         
         def extract():
@@ -79,7 +79,6 @@ async def handle_url(message: types.Message):
         
         builder = InlineKeyboardBuilder()
         
-        # إضافة خيارات الجودة المتاحة أو خيار عام للمنصات مثل تيك توك وإنستغرام
         if heights:
             for h in heights:
                 builder.button(text=f"🎬 {h}p", callback_data=f"dl:{task_id}:{h}")
@@ -108,28 +107,31 @@ async def process_download(callback: types.CallbackQuery):
     if not data:
         return await callback.message.edit_text("⚠️ **انتهت صلاحية الطلب. أرسل الرابط مرة أخرى.**")
 
-    # تحديد قالب حفظ الملف دون تقييد الامتداد
     out_template = os.path.join(DOWNLOAD_DIR, f"{task_id}.%(ext)s")
     
     try:
         def download():
+            common_opts = {
+                'outtmpl': out_template,
+                'quiet': True,
+                'no_warnings': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            }
+
             if quality == 'mp3':
                 opts = {
+                    **common_opts,
                     'format': 'bestaudio/best',
-                    'outtmpl': out_template,
-                    'quiet': True,
                 }
             elif quality == 'best':
                 opts = {
-                    'format': 'bestvideo+bestaudio/best',
-                    'outtmpl': out_template,
-                    'quiet': True
+                    **common_opts,
+                    'format': 'best',
                 }
             else:
                 opts = {
-                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best',
-                    'outtmpl': out_template,
-                    'quiet': True
+                    **common_opts,
+                    'format': f'best[height<={quality}]/best',
                 }
                 
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -137,7 +139,6 @@ async def process_download(callback: types.CallbackQuery):
 
         await asyncio.to_thread(download)
         
-        # البحث عن الملف الذي تم تنزيله أياً كان امتداده
         downloaded_files = glob.glob(os.path.join(DOWNLOAD_DIR, f"{task_id}.*"))
         
         if not downloaded_files:
@@ -159,7 +160,6 @@ async def process_download(callback: types.CallbackQuery):
         await callback.message.edit_text("❌ **حدث خطأ أثناء التحميل أو الرفع.**")
         
     finally:
-        # حذف الملفات المؤقتة والكاش لدعم تعدد المستخدمين وتوفير مساحة السيرفر
         downloaded_files = glob.glob(os.path.join(DOWNLOAD_DIR, f"{task_id}.*"))
         for f in downloaded_files:
             if os.path.exists(f):
@@ -172,6 +172,7 @@ async def main():
     await bot.set_webhook(WEBHOOK_URL)
     app = web.Application()
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
