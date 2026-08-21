@@ -5,48 +5,39 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
+from aiohttp import web
 
 # --- الإعدادات ---
-TOKEN = "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4"
-CHANNEL_ID = "@zinoad6162"  # معرف قناتك
+TOKEN = os.environ.get("BOT_TOKEN", "8932809251:AAFQ8MpRrCQHm38-25r3e0ttghMeJuoYjX4")
+CHANNEL_ID = "@zinoad6162"
+PORT = int(os.environ.get("PORT", 8080))
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# إنشاء مجلد التحميلات إذا لم يكن موجوداً
 if not os.path.exists("downloads"):
     os.makedirs("downloads")
 
-# --- دالة التحقق من الاشتراك ---
 async def is_subscribed(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ['member', 'administrator', 'creator']
-    except Exception as e:
-        print(f"خطأ في فحص الاشتراك: {e}")
+    except Exception:
         return False
 
-# --- الأمر start ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer("👋 أهلاً بك! أرسل رابط الفيديو وسأقوم بتحميله لك فوراً.")
 
-# --- معالجة الروابط والتحميل ---
 @dp.message(F.text.startswith("http"))
 async def handle_url(message: types.Message):
-    # 1. فحص الاشتراك أولاً
     if not await is_subscribed(message.from_user.id):
         channel_username = CHANNEL_ID.replace("@", "")
         kb = InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="📢 اشترك في القناة الآن", url=f"https://t.me/{channel_username}")
         ]])
-        return await message.answer(
-            "⚠️ **عذراً، يجب عليك الاشتراك في قناتنا أولاً لتتمكن من التحميل:**", 
-            reply_markup=kb,
-            parse_mode="Markdown"
-        )
+        return await message.answer("⚠️ **عذراً، يجب عليك الاشتراك في قناتنا أولاً لتتمكن من التحميل:**", reply_markup=kb, parse_mode="Markdown")
 
-    # 2. البدء في التحميل إذا كان مشتركاً
     msg = await message.answer("⏳ **جاري التحميل والمعالجة...**", parse_mode="Markdown")
     url = message.text.strip()
     task_id = str(uuid.uuid4())[:8]
@@ -74,17 +65,27 @@ async def handle_url(message: types.Message):
             await msg.edit_text("❌ **تعذر العثور على الملف بعد التنزيل.**", parse_mode="Markdown")
             
     except Exception as e:
-        print(f"Download Error: {e}")
+        print(f"Error: {e}")
         await msg.edit_text("❌ **حدث خطأ أثناء التحميل. تأكد من أن الرابط عام وصحيح.**", parse_mode="Markdown")
         
     finally:
-        # تنظيف الملفات المؤقتة دائماً
         if os.path.exists(file_path):
             os.remove(file_path)
 
-# --- تشغيل البوت ---
+# خادم ويب مصغر لاستجابة Render لإنهاء النشر بنجاح
+async def health_check(request):
+    return web.Response(text="Bot is running live!")
+
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
+    
+    app = web.Application()
+    app.router.add_get("/", health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    
     print("🤖 البوت يعمل الآن...")
     await dp.start_polling(bot)
 
